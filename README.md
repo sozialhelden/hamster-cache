@@ -59,4 +59,4 @@ cache.clear(); // forgets all items
 
 Supported by
 
-<img alt="Sozialhelden e.V." src='./doc/sozialhelden-logo.svg' width="200" style="vertical-align: middle;">.
+<img alt="Sozialhelden e.V." src='./doc/sozialhelden-logo.svg' width="200" style="vertical-align: middle;">
