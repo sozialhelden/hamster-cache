@@ -57,4 +57,4 @@ cache.clear(); // forgets all items
 - [@mutaphysis](https://github.com/mutaphysis)
 - [@opyh](https://github.com/opyh)
 
-Supported by <img src='./doc/sozialhelden-logo.svg' width="200">.
+Supported by <img src='./doc/sozialhelden-logo.svg' width="200" style="vertical-align: middle;">.
