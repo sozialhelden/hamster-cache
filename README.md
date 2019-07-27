@@ -1,12 +1,12 @@
 # Hamster Cache 🐹
 
 - Supports TypeScript
-- Evicts items by least recent use ('LRU') or age, depending on configuration
-- Evicts items if it reaches a configurable item limit on insertion
-- Evicts too old items on getting a value, or on request - based on a per-item time-to-live (TTL)
-- Lets you define a custom function to clean up, e.g. to close file handles or open connections, when it evicts an item
-- Allows you to bring your own internal cache (if it supports the ES6 `Map` interface)
+- Can limit number of cached items
+- Can evic exceeding items by least recent use ('LRU')
+- Supports individual time-to-live (TTL) for single items
 - Gives you meta information about cached objects, for stats generation or debugging
+- Allows you to bring your own internal cache (if it supports the ES6 `Map` interface)
+- Lets you define a custom function to clean up, e.g. to close file handles or open connections, when it evicts an item
 
 ## Installation
 
