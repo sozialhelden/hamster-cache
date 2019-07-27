@@ -1,47 +1,44 @@
 import LRUQueue from './LRUQueue';
-
-export type DisposeFunction = () => void;
-
-export type CacheStrategy = 'age' | 'lru';
-
-/**
- * An item in the cache, stored with metadata.
- */
-export interface IItem<T> {
-  value: T;
-  expireAfterTimestamp: number;
-  storageTimestamp: number;
-  dispose?: DisposeFunction;
-}
-
-export interface IOptions<K, V> {
-  /** Time to live (TTL) for items without specified custom TTL, given in milliseconds. */
-  defaultTTL: number;
-  /** Maximal number of items in the cache before it starts evicting items on adding new ones */
-  maximalItemCount: number;
-  evictExceedingItemsBy: CacheStrategy;
-  /** You can supply your own cache to this. */
-  cache: Map<K, IItem<V>>;
-}
-
-export interface ISetItemOptions<K, V> {
-  ttl?: number;
-  storageTimestamp?: number;
-  dispose?: DisposeFunction;
-}
-
-/**
- * A cache.
- *
- * - Evicts items by least recent use ('lru') or age depending on configuration
- * - Evicts items if it reaches a configurable item count limit on insert
- * - Evicts too old items on get or on request
- * - Supports items with different TTLs
- */
+import { IItem, IOptions, ISetItemOptions } from './types';
 
 export default class Cache<K, V> {
   public options: Readonly<IOptions<K, V>>;
   public lruQueue = new LRUQueue<K>();
+
+  /**
+   * A cache! 🐹
+   *
+   * - Can limit number of cached items
+   * - Can evic exceeding items by least recent use ('LRU')
+   * - Supports individual time-to-live (TTL) for single items
+   * - Gives you meta information about cached objects, for stats generation or debugging
+   * - Allows you to bring your own internal cache (if it supports the ES6 `Map` interface)
+   * - Lets you define a custom function to clean up (e.g. to close file handles or open connections)
+   *   when it evicts an item
+   *
+   * You can find more examples on [GitHub](https://github.com/sozialhelden/hamster-cache/blob/master/README.md).
+   *
+   * @param [options] - An object to configure the caching behavior.
+   * @param [options.defaultTTL] - Time after which a cached object is regarded as stale. After this
+   *   time, the object will be evicted when you call `evictExpiredItems()` or try to `get()` it
+   *   again. By default, the TTL is set to `Infinity`, keeping all objects cached until you
+   *   delete them manually. Given in milliseconds.
+   * @param [options.maximalItemCount] - Limits the maximum number of cached items. When you add a
+   *   value that would exceed the maximum, the cache removes either the oldest or the least
+   *   recently used item, depending on the policy set in `options.evictExceedingItemsBy`.
+   * @param [options.cache] - Decides which items to remove first when adding items
+   *   that would exceed the cache size limit. Set to `"lru"` to remove the least recently used item
+   *   first, `"age"` to remove the oldest items first. Defaults to `"lru"`.
+   * @param [options.evictExceedingItemsBy] - Use this to wrap this cache around your own cache map.
+   *   Must comply to the [ES6 `Map` interface](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map).
+   *
+   * @example
+   *   const cache = new Cache<string, string>({
+   *     evictExceedingItemsBy: 'lru', // or 'age'
+   *     defaultTTL: 5000,
+   *     maximalItemCount: 100,
+   *   });
+   */
 
   constructor({
     defaultTTL = Infinity,
@@ -55,7 +52,7 @@ export default class Cache<K, V> {
 
     if (maximalItemCount < 1) {
       throw new Error(
-        'Please supply a `maximalItemCount` parameter that is greater than zero, or do not supply the parameter to allow an infinite number of items.'
+        'Please supply a `maximalItemCount` parameter that is greater than zero. Supply no parameter or `Infinity` as value to allow an infinite number of items.'
       );
     }
 
@@ -67,13 +64,31 @@ export default class Cache<K, V> {
     });
   }
 
+  /**
+   * Adds an item to the cache.
+   *
+   * @param key - A unique key of the added item. If you derive this from a source where multiple
+   *   keys can refer to the the same cached resource, it is a good idea to normalize the key to
+   *   save resources. If you cache HTTP responses, for example, it might be a good idea to sort
+   *   the URL query parameters in some cases.
+   * @param value - the value to cache.
+   * @param [options] - Defines individual caching options for the added item
+   * @param [options.dispose] - A function that the cache will call back after deleting/evicting
+   *   this item. This is useful to clean up resources, e.g. to close cached file handles or network
+   *   connections.
+   * @param [options.storageTimestamp] - Allows to use your own method to determine the current
+   *   time. Uses `Date.now()` by default.
+   * @param [options.ttl] - Sets an individual TTL (time-to-live). After this time, the cache will
+   *   regard the item as stale / expired. It evicts a stale item when 1) you try to fetch it via
+   *   `get()` or `getMetaInfo()`, 2) when you call `evictExpiredItems()`.
+   */
   public set(
     key: K,
     value: V,
     {
-      ttl = this.options.defaultTTL,
-      storageTimestamp = Date.now(),
       dispose,
+      storageTimestamp = Date.now(),
+      ttl = this.options.defaultTTL,
     }: ISetItemOptions<K, V> = {}
   ): boolean {
     // Adding the value to the cache is not possible if ttl is zero.
@@ -102,7 +117,9 @@ export default class Cache<K, V> {
       }
     }
 
-    this.lruQueue.push(key);
+    if (this.options.evictExceedingItemsBy === 'lru') {
+      this.lruQueue.push(key);
+    }
     this.options.cache.set(key, item);
     return true;
   }
@@ -110,60 +127,66 @@ export default class Cache<K, V> {
   /**
    * Looks up a cached value + metadata without deleting it if expired.
    *
-   * @param key The key to look up
+   * @param key - The key to look up
    * @returns the looked up value + metadata, or `undefined` if the value is not cached.
    */
-  public peekItem(key: K): IItem<V> | undefined {
+
+  public peekWithMetaInfo(key: K): IItem<V> | undefined {
     return this.options.cache.get(key);
   }
 
   /**
    * Looks up a cached value without deleting it if expired.
    *
-   * @param key The key to look up
+   * @param key - The key to look up
    * @returns the looked up value, or `undefined` if the value is not cached.
    */
 
   public peek(key: K): V | undefined {
-    const item = this.peekItem(key);
+    const item = this.peekWithMetaInfo(key);
     return item && item.value;
   }
 
   /**
    * Looks up a cached value + metadata, deleting it if its older than the given timestamp.
    *
-   * @param key The key to look up
+   * @param key - The key to look up
    * @returns the looked up value + metadata, or `undefined` if the value is expired or not cached.
    */
 
-  public getItem(key: K, ifNotExpiredOnTimestamp: number = Date.now()): IItem<V> {
+  public getMetaInfo(key: K, ifNotExpiredOnTimestamp: number = Date.now()): IItem<V> | undefined {
     const item = this.options.cache.get(key);
-    if (typeof item !== 'undefined' && item.expireAfterTimestamp <= ifNotExpiredOnTimestamp) {
+    if (item !== undefined && item.expireAfterTimestamp <= ifNotExpiredOnTimestamp) {
       this.delete(key);
       return;
     }
-    this.lruQueue.touch(key);
+    if (this.options.evictExceedingItemsBy === 'lru') {
+      // Move the key to the end of the LRU deletion queue
+      this.lruQueue.touch(key);
+    }
     return item;
   }
 
   /**
-   * Looks up a value in the cache, deleting it if expired.
+   * Looks up a value in the cache, marking it as used or removing it if expired.
    *
-   * @param key The key to look up
-   * @param ifNotExpiredOnTimestamp If an item is older than this timestamp, it expires.
-   * @returns the looked up value, or `undefined` if the value is expired or not cached.
+   * @param key - The key to look up
+   * @param [ifNotExpiredOnTimestamp] - If an item is older than this timestamp, it expires.
+   * @returns the looked up value, or `undefined` if the value has expired or is not cached.
    */
 
   public get(key: K, ifNotExpiredOnTimestamp: number = Date.now()): V | undefined {
-    const item = this.getItem(key, ifNotExpiredOnTimestamp);
+    const item = this.getMetaInfo(key, ifNotExpiredOnTimestamp);
     return item && item.value;
   }
 
   /**
-   * Sweeps the cache and removes all items that are expired after the given timestamp.
+   * Sweeps the cache and evicts all items that are expired, calling their `dispose()` method if it
+   * was set on insertion.
    *
-   * @param ifNotOlderThanTimestamp If an item is older than this timestamp, it expires.
+   * @param [ifNotOlderThanTimestamp] - If an item is older than this timestamp, it expires.
    */
+
   public evictExpiredItems(ifOlderThanTimestamp: number = Date.now()) {
     for (const [key, item] of this.options.cache) {
       if (item.expireAfterTimestamp <= ifOlderThanTimestamp) {
@@ -173,62 +196,100 @@ export default class Cache<K, V> {
   }
 
   /**
-   * Looks up an item in the cache without marking it as touched.
+   * Looks up an item in the cache without marking it as used.
    *
-   * @param key The key to look up
+   * @param key The key to look up.
    */
+
   public has(key: K): boolean {
     return this.options.cache.has(key);
   }
 
   /**
-   * Looks up an item in the cache without marking it as touched.
+   * Deletes an item from the cache, calling its `dispose()` method if it was set on insertion.
    *
-   * @param key The key to look up
+   * @param key - The unique key refering to the object to delete.
    */
+
   public delete(key: K): boolean {
-    this.dispose(key);
-    this.lruQueue.delete(key);
-    return this.options.cache.delete(key);
+    if (this.options.evictExceedingItemsBy === 'lru') {
+      this.lruQueue.delete(key);
+    }
+    const item = this.peekWithMetaInfo(key);
+    if (item !== undefined) {
+      const result = this.options.cache.delete(key);
+      if (item.dispose) {
+        item.dispose();
+      }
+      return result;
+    }
+    return false;
   }
 
   /**
    * Removes all items from the cache.
    */
+
   public clear(): void {
     this.options.cache.clear();
-    this.lruQueue.clear();
+    if (this.options.evictExceedingItemsBy === 'lru') {
+      this.lruQueue.clear();
+    }
   }
+
+  /**
+   * Returns the number of items kept in the cache, including items that might be expired but not
+   * pruned yet.
+   */
 
   public size(): number {
     return this.options.cache.size;
   }
 
-  public setTTL(key: K, ttl: number, beginningFromTimestamp: number = Date.now()) {
-    const item = this.options.cache.get(key);
-    item.expireAfterTimestamp = beginningFromTimestamp + ttl;
-    return item.expireAfterTimestamp;
-  }
+  /**
+   * Changes the TTL (time-to-live) for an individual item in the cache.
+   *
+   * @param key - Unique key refering to the cached item whose .
+   * @param ttl - The new time-to-live, in milliseconds.
+   * @param [now] - Allows to use a custom method to determine the current time. Uses `Date.now()`
+   *   by default.
+   *
+   * @returns the new expiry timestamp, or `undefined`.
+   */
 
-  private dispose(key: K) {
-    const item = this.peekItem(key);
-    if (item.dispose) {
-      item.dispose();
+  public setTTL(key: K, ttl: number, now: number = Date.now()): number | undefined {
+    const item = this.options.cache.get(key);
+    if (item) {
+      item.expireAfterTimestamp = now + ttl;
+      return item.expireAfterTimestamp;
     }
+    return;
   }
 
   private deleteOldestItem() {
     // This works because the insertion order is maintained when iterating keys.
     const key = this.options.cache.keys().next().value;
-    if (typeof key !== 'undefined') {
+    if (key !== undefined) {
       this.delete(key);
     }
   }
 
-  private deleteLeastRecentlyUsedItem() {
+  private deleteLeastRecentlyUsedItem(): boolean {
+    if (this.options.evictExceedingItemsBy !== 'lru') {
+      throw new Error(
+        'Can only use this function if the cache is initialized to watch least recent use of an item.'
+      );
+    }
     const key = this.lruQueue.shift();
-    this.dispose(key);
+    if (!key) {
+      return false;
+    }
+    const item = this.peekWithMetaInfo(key);
     this.lruQueue.delete(key);
-    return this.options.cache.delete(key);
+    const result = this.options.cache.delete(key);
+    if (item && item.dispose) {
+      item.dispose();
+    }
+    return result;
   }
 }

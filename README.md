@@ -43,9 +43,9 @@ cache.set(
 
 cache.peek('key'); // gets the cached value without side effects
 cache.has('key'); // `true` if an item exists in the cache, `false` otherwise
-cache.peekItem('key'); // same as `peek`, but returns value with meta information
+cache.peekWithMetaInfo('key'); // same as `peek`, but returns value with meta information
 cache.get('key'); // gets a value with side effect that the cache evicts the object if expired
-cache.getItem('key'); // same as `get`, but returns value with meta information
+cache.getMetaInfo('key'); // same as `get`, but returns value with meta information
 cache.evictExpiredItems(); // Do this to save memory in a setInterval call - or whenever you need it!
 cache.delete('key'); // removes an item from the cache
 cache.clear(); // forgets all items
