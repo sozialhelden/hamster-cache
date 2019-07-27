@@ -38,7 +38,8 @@ export type SetItemOptions<K, V> = {
  * - Evicts too old items on get or on request
  * - Supports items with different TTLs
  */
-export default class LimitedCache<K, V> {
+
+export default class Cache<K, V> {
   options: Readonly<Options<K, V>>;
   lruQueue = new LRUQueue<K>();
 
