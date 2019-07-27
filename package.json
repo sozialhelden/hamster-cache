@@ -53,6 +53,6 @@
     "semantic-release-prepare": "ts-node tools/semantic-release-prepare",
     "format": "tslint --fix src/**/*.ts",
     "prettier": "npx prettier --fix src/**/*.ts test/**/*.ts --write --single-quote",
-    "deploy": "npm build && npm run test:prod && npm publish --access public"
+    "deploy": "npm run build && npm run test:prod && npm publish --access public"
   }
 }
