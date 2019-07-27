@@ -12,8 +12,8 @@ describe('Cache', () => {
 
   it('evicts exceeding items by age', () => {
     const cache = new Cache<string, string>({
-      maximalItemCount: 2,
       evictExceedingItemsBy: 'age',
+      maximalItemCount: 2,
     });
 
     let xIsDisposed = false;
@@ -39,8 +39,8 @@ describe('Cache', () => {
 
   it('evicts exceeding items by LRU', () => {
     const cache = new Cache<string, string>({
-      maximalItemCount: 2,
       evictExceedingItemsBy: 'lru',
+      maximalItemCount: 2,
     });
 
     let xIsDisposed = false;
@@ -79,34 +79,35 @@ describe('Cache', () => {
 
     const createCache = (strategy: CacheStrategy) =>
       new Cache<string, string>({
-        maximalItemCount: 4,
-        evictExceedingItemsBy: strategy,
         defaultTTL: 5000,
+        evictExceedingItemsBy: strategy,
+        maximalItemCount: 4,
       });
 
     (['lru', 'age'] as CacheStrategy[]).forEach(strategy => {
       it(`has a working 'peekItem' method with '${strategy}' strategy`, () => {
         const cache = createCache(strategy);
         dateNowSpy.mockReturnValueOnce(10000);
-        const dispose = () => {};
+        const dispose = jest.fn();
         cache.set('x', 'y', { dispose });
         dateNowSpy.mockReturnValueOnce(14999);
         const expectedItem = {
-          value: 'y',
+          dispose,
           expireAfterTimestamp: 15000,
           storageTimestamp: 10000,
-          dispose,
+          value: 'y',
         };
         expect(cache.peekItem('x')).toEqual(expectedItem);
+        expect(dispose).toBeCalledTimes(0);
         dateNowSpy.mockReturnValueOnce(15000);
         expect(cache.peekItem('x')).toEqual(expectedItem);
+        expect(dispose).toBeCalledTimes(0);
       });
 
       it(`has a working 'peek' method with '${strategy}' strategy`, () => {
         const cache = createCache(strategy);
         dateNowSpy.mockReturnValueOnce(10000);
-        const dispose = () => {};
-        cache.set('x', 'y', { dispose });
+        cache.set('x', 'y');
         dateNowSpy.mockReturnValueOnce(14999);
         expect(cache.peek('x')).toEqual('y');
         dateNowSpy.mockReturnValueOnce(15000);
@@ -116,16 +117,21 @@ describe('Cache', () => {
       it(`has a working 'getItem' method with '${strategy}' strategy`, () => {
         const cache = createCache(strategy);
         dateNowSpy.mockReturnValue(10000);
-        const dispose = () => {};
+        // tslint:disable-next-line: no-empty
+        const dispose = jest.fn();
         cache.set('x', 'y', { dispose });
         dateNowSpy.mockReturnValue(14999);
         expect(cache.getItem('x')).toEqual({
-          value: 'y',
+          dispose,
           expireAfterTimestamp: 15000,
           storageTimestamp: 10000,
-          dispose,
+          value: 'y',
         });
         dateNowSpy.mockReturnValue(15000);
+        // TTL reached, item should be evicted as side effect
+        expect(cache.getItem('x')).toBeUndefined();
+        expect(dispose).toBeCalledTimes(1);
+        expect(cache.options.cache.get('x')).toBeUndefined();
         expect(cache.getItem('x')).toBeUndefined();
       });
 
@@ -196,6 +202,4 @@ describe('Cache', () => {
       });
     });
   });
-
-  it('disposes deleted items', () => {});
 });

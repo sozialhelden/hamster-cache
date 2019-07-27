@@ -7,28 +7,28 @@ export type CacheStrategy = 'age' | 'lru';
 /**
  * An item in the cache, stored with metadata.
  */
-export type Item<T> = {
+export interface IItem<T> {
   value: T;
   expireAfterTimestamp: number;
   storageTimestamp: number;
   dispose?: DisposeFunction;
-};
+}
 
-export type Options<K, V> = {
+export interface IOptions<K, V> {
   /** Time to live (TTL) for items without specified custom TTL, given in milliseconds. */
   defaultTTL: number;
   /** Maximal number of items in the cache before it starts evicting items on adding new ones */
   maximalItemCount: number;
   evictExceedingItemsBy: CacheStrategy;
   /** You can supply your own cache to this. */
-  cache: Map<K, Item<V>>;
-};
+  cache: Map<K, IItem<V>>;
+}
 
-export type SetItemOptions<K, V> = {
+export interface ISetItemOptions<K, V> {
   ttl?: number;
   storageTimestamp?: number;
   dispose?: DisposeFunction;
-};
+}
 
 /**
  * A cache.
@@ -40,15 +40,15 @@ export type SetItemOptions<K, V> = {
  */
 
 export default class Cache<K, V> {
-  options: Readonly<Options<K, V>>;
-  lruQueue = new LRUQueue<K>();
+  public options: Readonly<IOptions<K, V>>;
+  public lruQueue = new LRUQueue<K>();
 
   constructor({
     defaultTTL = Infinity,
     maximalItemCount = Infinity,
-    cache = new Map<K, Item<V>>(),
+    cache = new Map<K, IItem<V>>(),
     evictExceedingItemsBy = 'lru',
-  }: Partial<Options<K, V>> = {}) {
+  }: Partial<IOptions<K, V>> = {}) {
     if (defaultTTL < 0) {
       throw new Error('Please supply a `ttl` value greater than zero.');
     }
@@ -60,28 +60,21 @@ export default class Cache<K, V> {
     }
 
     this.options = Object.freeze({
-      defaultTTL,
-      maximalItemCount,
       cache,
+      defaultTTL,
       evictExceedingItemsBy,
+      maximalItemCount,
     });
   }
 
-  private dispose(key: K) {
-    const item = this.peekItem(key);
-    if (item.dispose) {
-      item.dispose();
-    }
-  }
-
-  set(
+  public set(
     key: K,
     value: V,
     {
       ttl = this.options.defaultTTL,
       storageTimestamp = Date.now(),
       dispose,
-    }: SetItemOptions<K, V> = {}
+    }: ISetItemOptions<K, V> = {}
   ): boolean {
     // Adding the value to the cache is not possible if ttl is zero.
     if (ttl <= 0) {
@@ -91,11 +84,11 @@ export default class Cache<K, V> {
     // Check for infinity in which case the item persists forever.
     const expireAfterTimestamp = ttl < Infinity ? storageTimestamp + ttl : Infinity;
 
-    const item: Item<V> = {
-      value,
+    const item: IItem<V> = {
+      dispose,
       expireAfterTimestamp,
       storageTimestamp,
-      dispose,
+      value,
     };
 
     while (this.options.cache.size >= this.options.maximalItemCount) {
@@ -114,28 +107,13 @@ export default class Cache<K, V> {
     return true;
   }
 
-  private deleteOldestItem() {
-    // This works because the insertion order is maintained when iterating keys.
-    const key = this.options.cache.keys().next().value;
-    if (typeof key !== 'undefined') {
-      this.delete(key);
-    }
-  }
-
-  private deleteLeastRecentlyUsedItem() {
-    const key = this.lruQueue.shift();
-    this.dispose(key);
-    this.lruQueue.delete(key);
-    return this.options.cache.delete(key);
-  }
-
   /**
    * Looks up a cached value + metadata without deleting it if expired.
    *
    * @param key The key to look up
    * @returns the looked up value + metadata, or `undefined` if the value is not cached.
    */
-  peekItem(key: K): Item<V> | undefined {
+  public peekItem(key: K): IItem<V> | undefined {
     return this.options.cache.get(key);
   }
 
@@ -146,7 +124,7 @@ export default class Cache<K, V> {
    * @returns the looked up value, or `undefined` if the value is not cached.
    */
 
-  peek(key: K): V | undefined {
+  public peek(key: K): V | undefined {
     const item = this.peekItem(key);
     return item && item.value;
   }
@@ -158,7 +136,7 @@ export default class Cache<K, V> {
    * @returns the looked up value + metadata, or `undefined` if the value is expired or not cached.
    */
 
-  getItem(key: K, ifNotExpiredOnTimestamp: number = Date.now()): Item<V> {
+  public getItem(key: K, ifNotExpiredOnTimestamp: number = Date.now()): IItem<V> {
     const item = this.options.cache.get(key);
     if (typeof item !== 'undefined' && item.expireAfterTimestamp <= ifNotExpiredOnTimestamp) {
       this.delete(key);
@@ -176,7 +154,7 @@ export default class Cache<K, V> {
    * @returns the looked up value, or `undefined` if the value is expired or not cached.
    */
 
-  get(key: K, ifNotExpiredOnTimestamp: number = Date.now()): V | undefined {
+  public get(key: K, ifNotExpiredOnTimestamp: number = Date.now()): V | undefined {
     const item = this.getItem(key, ifNotExpiredOnTimestamp);
     return item && item.value;
   }
@@ -186,7 +164,7 @@ export default class Cache<K, V> {
    *
    * @param ifNotOlderThanTimestamp If an item is older than this timestamp, it expires.
    */
-  evictExpiredItems(ifOlderThanTimestamp: number = Date.now()) {
+  public evictExpiredItems(ifOlderThanTimestamp: number = Date.now()) {
     for (const [key, item] of this.options.cache) {
       if (item.expireAfterTimestamp <= ifOlderThanTimestamp) {
         this.delete(key);
@@ -199,7 +177,7 @@ export default class Cache<K, V> {
    *
    * @param key The key to look up
    */
-  has(key: K): boolean {
+  public has(key: K): boolean {
     return this.options.cache.has(key);
   }
 
@@ -208,7 +186,7 @@ export default class Cache<K, V> {
    *
    * @param key The key to look up
    */
-  delete(key: K): boolean {
+  public delete(key: K): boolean {
     this.dispose(key);
     this.lruQueue.delete(key);
     return this.options.cache.delete(key);
@@ -217,18 +195,40 @@ export default class Cache<K, V> {
   /**
    * Removes all items from the cache.
    */
-  clear(): void {
+  public clear(): void {
     this.options.cache.clear();
     this.lruQueue.clear();
   }
 
-  size(): number {
+  public size(): number {
     return this.options.cache.size;
   }
 
-  setTTL(key: K, ttl: number, beginningFromTimestamp: number = Date.now()) {
+  public setTTL(key: K, ttl: number, beginningFromTimestamp: number = Date.now()) {
     const item = this.options.cache.get(key);
     item.expireAfterTimestamp = beginningFromTimestamp + ttl;
     return item.expireAfterTimestamp;
+  }
+
+  private dispose(key: K) {
+    const item = this.peekItem(key);
+    if (item.dispose) {
+      item.dispose();
+    }
+  }
+
+  private deleteOldestItem() {
+    // This works because the insertion order is maintained when iterating keys.
+    const key = this.options.cache.keys().next().value;
+    if (typeof key !== 'undefined') {
+      this.delete(key);
+    }
+  }
+
+  private deleteLeastRecentlyUsedItem() {
+    const key = this.lruQueue.shift();
+    this.dispose(key);
+    this.lruQueue.delete(key);
+    return this.options.cache.delete(key);
   }
 }
