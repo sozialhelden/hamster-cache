@@ -158,9 +158,9 @@ export default class Cache<K, V> {
    * @returns the looked up value + metadata, or `undefined` if the value is expired or not cached.
    */
 
-  getItem(key: K, ifNotOlderThanTimestamp: number = Date.now()): Item<V> {
+  getItem(key: K, ifNotExpiredOnTimestamp: number = Date.now()): Item<V> {
     const item = this.options.cache.get(key);
-    if (typeof item !== 'undefined' && item.expireAfterTimestamp <= ifNotOlderThanTimestamp) {
+    if (typeof item !== 'undefined' && item.expireAfterTimestamp <= ifNotExpiredOnTimestamp) {
       this.delete(key);
       return;
     }
@@ -172,12 +172,12 @@ export default class Cache<K, V> {
    * Looks up a value in the cache, deleting it if expired.
    *
    * @param key The key to look up
-   * @param ifNotOlderThanTimestamp If an item is older than this timestamp, it expires.
+   * @param ifNotExpiredOnTimestamp If an item is older than this timestamp, it expires.
    * @returns the looked up value, or `undefined` if the value is expired or not cached.
    */
 
-  get(key: K, ifNotOlderThanTimestamp: number = Date.now()): V | undefined {
-    const item = this.getItem(key, ifNotOlderThanTimestamp);
+  get(key: K, ifNotExpiredOnTimestamp: number = Date.now()): V | undefined {
+    const item = this.getItem(key, ifNotExpiredOnTimestamp);
     return item && item.value;
   }
 
@@ -220,5 +220,15 @@ export default class Cache<K, V> {
   clear(): void {
     this.options.cache.clear();
     this.lruQueue.clear();
+  }
+
+  size(): number {
+    return this.options.cache.size;
+  }
+
+  setTTL(key: K, ttl: number, beginningFromTimestamp: number = Date.now()) {
+    const item = this.options.cache.get(key);
+    item.expireAfterTimestamp = beginningFromTimestamp + ttl;
+    return item.expireAfterTimestamp;
   }
 }

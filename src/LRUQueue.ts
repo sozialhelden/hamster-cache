@@ -29,4 +29,8 @@ export default class LRUQueue<K> {
     this.lruRemovalQueue = [];
     this.keysToLRUQueueIndexes.clear();
   }
+
+  length() {
+    return this.lruRemovalQueue.length;
+  }
 }

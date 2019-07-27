@@ -7,9 +7,10 @@ describe('Cache', () => {
     cache.set('qoo', 'qux');
     expect(cache.get('foo')).toBe('bar');
     expect(cache.get('qoo')).toBe('qux');
+    expect(cache.size()).toBe(2);
   });
 
-  it('does not cache more items than allowed', () => {
+  it('evicts exceeding items by age', () => {
     const cache = new Cache<string, string>({
       maximalItemCount: 2,
       evictExceedingItemsBy: 'age',
@@ -21,11 +22,13 @@ describe('Cache', () => {
 
     cache.set('old', 'X', { dispose: () => (xIsDisposed = true) });
     cache.set('new', 'Y', { dispose: () => (yIsDisposed = true) });
+    expect(cache.size()).toBe(2);
 
     // Mark the item as used to keep it in the cache on reaching the maximal number of items
     cache.get('old');
     cache.set('evenNewer', 'Z', { dispose: () => (zIsDisposed = true) });
 
+    expect(cache.size()).toBe(2);
     expect(cache.get('old')).toBeUndefined();
     expect(xIsDisposed).toBe(true);
     expect(cache.get('new')).toBe('Y');
@@ -34,7 +37,7 @@ describe('Cache', () => {
     expect(zIsDisposed).toBe(false);
   });
 
-  it('does not cache more items than allowed', () => {
+  it('evicts exceeding items by LRU', () => {
     const cache = new Cache<string, string>({
       maximalItemCount: 2,
       evictExceedingItemsBy: 'lru',
@@ -46,11 +49,13 @@ describe('Cache', () => {
 
     cache.set('old', 'X', { dispose: () => (xIsDisposed = true) });
     cache.set('new', 'Y', { dispose: () => (yIsDisposed = true) });
+    expect(cache.size()).toBe(2);
 
     // Mark the item as used to keep it in the cache on reaching the maximal number of items
     cache.get('old');
     cache.set('evenNewer', 'Z', { dispose: () => (zIsDisposed = true) });
 
+    expect(cache.size()).toBe(2);
     expect(cache.get('old')).toBe('X');
     expect(xIsDisposed).toBe(false);
     expect(cache.get('new')).toBeUndefined();
@@ -181,6 +186,13 @@ describe('Cache', () => {
         cache.clear();
         expect(cache.has('a')).toBe(false);
         expect(cache.has('b')).toBe(false);
+      });
+
+      it(`can change the TTL of an existing item`, () => {
+        const cache = createCache(strategy);
+        cache.set('a', 'x');
+        cache.setTTL('a', 100, 100);
+        expect(cache.peekItem('a').expireAfterTimestamp).toBe(200);
       });
     });
   });
