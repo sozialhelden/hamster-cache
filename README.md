@@ -1,5 +1,7 @@
 # Hamster Cache 🐹
 
+[![Greenkeeper badge](https://badges.greenkeeper.io/sozialhelden/hamster-cache.svg)](https://greenkeeper.io/)
+
 - Supports TypeScript
 - Can limit number of cached items
 - Can evic exceeding items by least recent use ('LRU')
