@@ -62,7 +62,7 @@ export interface IOptions<K, V> {
 /**
  * Defines an individual caching behavior for a cached item.
  */
-export interface ISetItemOptions<K, V> {
+export interface ISetItemOptions {
   /*
    * Sets an individual TTL (time-to-live). After this time, the cache will regard the item as
    * stale / expired. It evicts a stale item when 1) you try to fetch it via `get()` or

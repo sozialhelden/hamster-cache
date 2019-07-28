@@ -46,11 +46,11 @@ export default class Cache<K, V> {
     cache = new Map<K, IItem<V>>(),
     evictExceedingItemsBy = 'lru',
   }: Partial<IOptions<K, V>> = {}) {
-    if (defaultTTL < 0) {
-      throw new Error('Please supply a `ttl` value greater than zero.');
+    if (defaultTTL <= 0) {
+      throw new Error('Please supply a `defaultTTL` value greater than zero.');
     }
 
-    if (maximalItemCount < 1) {
+    if (maximalItemCount <= 0) {
       throw new Error(
         'Please supply a `maximalItemCount` parameter that is greater than zero. Supply no parameter or `Infinity` as value to allow an infinite number of items.'
       );
@@ -85,17 +85,8 @@ export default class Cache<K, V> {
   public set(
     key: K,
     value: V,
-    {
-      dispose,
-      storageTimestamp = Date.now(),
-      ttl = this.options.defaultTTL,
-    }: ISetItemOptions<K, V> = {}
+    { dispose, storageTimestamp = Date.now(), ttl = this.options.defaultTTL }: ISetItemOptions = {}
   ): boolean {
-    // Adding the value to the cache is not possible if ttl is zero.
-    if (ttl <= 0) {
-      return false;
-    }
-
     // Check for infinity in which case the item persists forever.
     const expireAfterTimestamp = ttl < Infinity ? storageTimestamp + ttl : Infinity;
 
@@ -266,30 +257,30 @@ export default class Cache<K, V> {
     return;
   }
 
-  private deleteOldestItem() {
+  public deleteLeastRecentlyUsedItem(): IItem<V> | undefined {
+    if (this.options.evictExceedingItemsBy !== 'lru') {
+      throw new Error(
+        'Can only use this function if the cache is initialized to watch LRU of items.'
+      );
+    }
+    const key = this.lruQueue.shift();
+    if (!key) {
+      return undefined;
+    }
+    const item = this.peekWithMetaInfo(key);
+    this.lruQueue.delete(key);
+    this.options.cache.delete(key);
+    if (item && item.dispose) {
+      item.dispose();
+    }
+    return item;
+  }
+
+  public deleteOldestItem() {
     // This works because the insertion order is maintained when iterating keys.
     const key = this.options.cache.keys().next().value;
     if (key !== undefined) {
       this.delete(key);
     }
-  }
-
-  private deleteLeastRecentlyUsedItem(): boolean {
-    if (this.options.evictExceedingItemsBy !== 'lru') {
-      throw new Error(
-        'Can only use this function if the cache is initialized to watch least recent use of an item.'
-      );
-    }
-    const key = this.lruQueue.shift();
-    if (!key) {
-      return false;
-    }
-    const item = this.peekWithMetaInfo(key);
-    this.lruQueue.delete(key);
-    const result = this.options.cache.delete(key);
-    if (item && item.dispose) {
-      item.dispose();
-    }
-    return result;
   }
 }

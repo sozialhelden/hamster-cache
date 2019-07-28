@@ -2,6 +2,13 @@
 import Cache, { CacheStrategy } from './index';
 
 describe('Cache', () => {
+  describe('constructor', () => {
+    it('throws with wrong parameters', () => {
+      expect(() => new Cache({ defaultTTL: 0 })).toThrowError(/defaultTTL/);
+      expect(() => new Cache({ maximalItemCount: 0 })).toThrowError(/maximalItemCount/);
+    });
+  });
+
   it('caches items', () => {
     const cache = new Cache();
     cache.set('foo', 'bar');
@@ -36,6 +43,9 @@ describe('Cache', () => {
     expect(yIsDisposed).toBe(false);
     expect(cache.get('evenNewer')).toBe('Z');
     expect(zIsDisposed).toBe(false);
+    expect(() => {
+      cache.deleteLeastRecentlyUsedItem();
+    }).toThrowError(/LRU/);
   });
 
   it('evicts exceeding items by LRU', () => {
@@ -47,22 +57,36 @@ describe('Cache', () => {
     let xIsDisposed = false;
     let yIsDisposed = false;
     let zIsDisposed = false;
+    const x = { dispose: () => (xIsDisposed = true) };
+    const y = { dispose: () => (yIsDisposed = true) };
+    const z = { dispose: () => (zIsDisposed = true) };
 
-    cache.set('old', 'X', { dispose: () => (xIsDisposed = true) });
-    cache.set('new', 'Y', { dispose: () => (yIsDisposed = true) });
+    cache.set('old', 'X', x);
+    cache.set('new', 'Y', y);
     expect(cache.size()).toBe(2);
+    expect(cache.lruQueue.lruRemovalQueue).toEqual(['old', 'new']);
 
     // Mark the item as used to keep it in the cache on reaching the maximal number of items
     cache.get('old');
-    cache.set('evenNewer', 'Z', { dispose: () => (zIsDisposed = true) });
+    expect(cache.lruQueue.lruRemovalQueue).toEqual(['new', 'old']);
+    cache.set('evenNewer', 'Z', z);
+    expect(cache.lruQueue.lruRemovalQueue).toEqual(['old', 'evenNewer']);
 
     expect(cache.size()).toBe(2);
-    expect(cache.get('old')).toBe('X');
+    expect(cache.peek('old')).toBe('X');
     expect(xIsDisposed).toBe(false);
-    expect(cache.get('new')).toBeUndefined();
+    expect(cache.peek('new')).toBeUndefined();
     expect(yIsDisposed).toBe(true);
-    expect(cache.get('evenNewer')).toBe('Z');
+    expect(cache.peek('evenNewer')).toBe('Z');
     expect(zIsDisposed).toBe(false);
+    expect(cache.deleteLeastRecentlyUsedItem()).toMatchObject({ value: 'X' });
+    expect(cache.lruQueue.lruRemovalQueue).toEqual(['evenNewer']);
+    expect(cache.size()).toBe(1);
+    expect(cache.deleteLeastRecentlyUsedItem()).toMatchObject({ value: 'Z' });
+    expect(cache.lruQueue.lruRemovalQueue).toEqual([]);
+    expect(cache.size()).toBe(0);
+    expect(cache.deleteLeastRecentlyUsedItem()).toBeUndefined();
+    expect(cache.size()).toBe(0);
   });
 
   describe('methods', () => {
@@ -214,6 +238,33 @@ describe('Cache', () => {
           });
         });
 
+        describe('delete', () => {
+          it('deletes an existing key and returns true', () => {
+            const cache = createCache(strategy);
+            cache.set('a', 'x');
+            cache.set('b', 'x');
+            expect(cache.delete('a')).toBe(true);
+          });
+          it('returns false when deleting a non-existing key', () => {
+            const cache = createCache(strategy);
+            cache.set('a', 'x');
+            cache.set('b', 'x');
+            expect(cache.delete('c')).toBe(false);
+          });
+          it('can be called twice', () => {
+            const cache = createCache(strategy);
+            cache.set('a', 'x');
+            expect(cache.delete('a')).toBe(true);
+            expect(cache.delete('a')).toBe(false);
+          });
+          it('actually removes the cached item', () => {
+            const cache = createCache(strategy);
+            cache.set('a', 'x');
+            cache.delete('a');
+            expect(cache.get('a')).toBeUndefined();
+          });
+        });
+
         describe('setTTL', () => {
           it(`changes the TTL of an existing item`, () => {
             const cache = createCache(strategy);
@@ -221,6 +272,30 @@ describe('Cache', () => {
             cache.setTTL('a', 100, 100);
             const item = cache.peekWithMetaInfo('a');
             expect(item && item.expireAfterTimestamp).toBe(200);
+          });
+
+          it('does not crash if trying to set a ttl for a non-existing item', () => {
+            const cache = createCache(strategy);
+            cache.set('a', 'x');
+            cache.setTTL('b', 100, 100);
+          });
+        });
+
+        describe('deleteOldestItem', () => {
+          it('deletes the oldest item', () => {
+            const cache = createCache(strategy);
+            cache.set('a', 'x');
+            cache.set('b', 'y');
+            cache.deleteOldestItem();
+            expect(cache.size()).toBe(1);
+            expect(cache.get('a')).toBeUndefined();
+            expect(cache.get('b')).toBe('y');
+          });
+
+          it('is a no-op if the cache is empty', () => {
+            const cache = createCache(strategy);
+            cache.deleteOldestItem();
+            expect(cache.size()).toBe(0);
           });
         });
       });
