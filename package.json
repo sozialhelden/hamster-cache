@@ -15,7 +15,7 @@
   "deprecated": false,
   "description": "A cache featuring eviction based on LRU, maximal item count and TTL.",
   "devDependencies": {
-    "@babel/parser": "^7.5.5",
+    "@babel/parser": "^7.6.3",
     "@babel/plugin-proposal-class-properties": "^7.5.5",
     "@babel/preset-env": "^7.5.5",
     "@babel/preset-typescript": "^7.3.3",
