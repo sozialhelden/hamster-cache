@@ -28,7 +28,7 @@
     "cz-conventional-changelog": "^3.0.2",
     "jest": "^24.8.0",
     "rimraf": "^3.0.0",
-    "ts-jest": "^24.0.2",
+    "ts-jest": "^25.1.0",
     "tslint": "^5.18.0",
     "tslint-config-airbnb": "^5.11.1",
     "tslint-config-prettier": "^1.18.0",
