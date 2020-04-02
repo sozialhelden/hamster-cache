@@ -49,8 +49,5 @@
     "format": "tslint --fix src/**/*.ts",
     "prettier": "npx prettier --fix src/**/*.ts test/**/*.ts --write --single-quote",
     "deploy": "npm run build && npm run test:prod && npm publish --access public"
-  },
-  "dependencies": {
-    "minimist": "^1.2.5"
   }
 }
