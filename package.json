@@ -45,7 +45,6 @@
     "test:prod": "npm run lint && npm run test -- --coverage --no-cache",
     "deploy-docs": "ts-node tools/gh-pages-publish",
     "report-coverage": "cat ./coverage/lcov.info | coveralls",
-    "commit": "git-cz",
     "format": "tslint --fix src/**/*.ts",
     "prettier": "npx prettier --fix src/**/*.ts test/**/*.ts --write --single-quote",
     "deploy": "npm run build && npm run test:prod && npm publish --access public"
